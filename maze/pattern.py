@@ -5,11 +5,11 @@ from .grid import Grid
 Coord: TypeAlias = tuple[int, int]
 
 PATTERN_42: list[str] = [
-    "4  2 2",
-    "4  2 2",
-    "444222",
-    "  4  2",
-    "  4222",
+    "X X XXX",
+    "X X   X",
+    "XXX XXX",
+    "  X X  ",
+    "  X XXX",
 ]
 
 _PATTERN_HEIGHT: int = len(PATTERN_42)
