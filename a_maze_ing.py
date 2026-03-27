@@ -10,11 +10,8 @@ from maze.ascii_render import (
     hide_cursor,
     show_cursor,
 )
-from maze.generator import generate_maze
-from maze.grid import Grid, Coord, create_grid
-from maze.pattern import stamp_42_pattern
-from maze.solver import solve_maze
-from maze.encoder import write_output
+from maze.grid import Grid, Coord
+from mazegen_core import MazeGenerator
 from parsing.config_parser import parse_config
 from maze.intro_animation import intro_screen
 
@@ -38,13 +35,17 @@ def _build_maze(config: object, show_path: bool, animate: bool,
                 theme_name: str):
     entry: Coord = config.entry
     exit_: Coord = config.exit
-    grid: Grid = create_grid(config.width, config.height)
-    forbidden = stamp_42_pattern(grid)
 
-    generate_maze(grid=grid, seed=config.seed, perfect=config.perfect,
-                  forbidden=forbidden)
-    path = solve_maze(grid, entry, exit_)
-    write_output(config.output_file, grid, entry, exit_, path)
+    generator = MazeGenerator(
+        width=config.width,
+        height=config.height,
+        seed=config.seed,
+        perfect=config.perfect,
+        entry=entry,
+        exit_=exit_,
+    )
+    grid, path, forbidden = generator.generate()
+    generator.write_output(config.output_file, grid, path)
 
     if animate:
         render_animated(grid, entry, exit_, forbidden=forbidden,
