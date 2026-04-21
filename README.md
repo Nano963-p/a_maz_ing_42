@@ -65,7 +65,7 @@ python3 --version
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/your_login/a-maze-ing.git
+git clone https://github.com/Nano963-p/a_maz_ing_42.git
 cd a-maze-ing
 make install
 ```
