@@ -1,0 +1,178 @@
+
+<style>
+  #dfs-root { padding: 1rem 0; font-size: 14px; color: var(--color-text-primary); }
+  #maze-canvas { display: block; margin: 0 auto; }
+  .ctrl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 8px; justify-content: center; }
+  button { font-size: 13px; padding: 5px 14px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary); cursor: pointer; }
+  button:hover { background: var(--color-background-secondary); }
+  button:disabled { opacity: .35; cursor: default; }
+  #step-info { text-align: center; font-size: 13px; color: var(--color-text-secondary); min-height: 1.6em; margin-top: 6px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 10px 0 4px; font-size: 12px; color: var(--color-text-secondary); align-items: center; }
+  .leg-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 4px; }
+</style>
+<div id="dfs-root">
+  <canvas id="maze-canvas" width="340" height="340"></canvas>
+  <div class="legend">
+    <span><span class="leg-swatch" style="background:#EF9F27"></span>Current cell</span>
+    <span><span class="leg-swatch" style="background:#AFA9EC"></span>On stack (path)</span>
+    <span><span class="leg-swatch" style="background:#9FE1CB"></span>Visited</span>
+    <span><span class="leg-swatch" style="background:#D3D1C7"></span>Unvisited</span>
+  </div>
+  <div class="ctrl">
+    <button id="btn-prev" disabled>← Prev</button>
+    <button id="btn-next">Next →</button>
+    <button id="btn-auto" id="btn-auto">Auto play</button>
+    <button id="btn-reset">Reset</button>
+  </div>
+  <div id="step-info">Press "Next" to start the DFS.</div>
+</div>
+<script>
+(function(){
+  const COLS = 5, ROWS = 5;
+  const CELL = 60, PAD = 20;
+  const W = COLS * CELL + PAD*2, H = ROWS * CELL + PAD*2;
+  const canvas = document.getElementById('maze-canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  function rng(seed){let s=seed;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296};}
+  const rand = rng(42);
+
+  function makeGrid(){
+    const g=[];
+    for(let r=0;r<ROWS;r++){g.push([]);for(let c=0;c<COLS;c++)g[r].push({n:true,e:true,s:true,w:true,visited:false});}
+    return g;
+  }
+
+  function removeWall(grid,r,c,nr,nc){
+    if(nr===r-1){grid[r][c].n=false;grid[nr][nc].s=false;}
+    else if(nr===r+1){grid[r][c].s=false;grid[nr][nc].n=false;}
+    else if(nc===c+1){grid[r][c].e=false;grid[nr][nc].w=false;}
+    else if(nc===c-1){grid[r][c].w=false;grid[nr][nc].e=false;}
+  }
+
+  function getUnvisited(grid,r,c){
+    const nb=[];
+    if(r>0&&!grid[r-1][c].visited)nb.push([r-1,c,'N']);
+    if(r<ROWS-1&&!grid[r+1][c].visited)nb.push([r+1,c,'S']);
+    if(c>0&&!grid[r][c-1].visited)nb.push([r,c-1,'W']);
+    if(c<COLS-1&&!grid[r][c+1].visited)nb.push([r,c+1,'E']);
+    return nb;
+  }
+
+  function buildSteps(){
+    const grid=makeGrid();
+    const steps=[];
+    const stack=[[0,0]];
+    grid[0][0].visited=true;
+    steps.push({grid:deepCopy(grid),stack:[...stack.map(x=>[...x])],action:'Start at (0,0). Mark visited and push to stack.'});
+
+    while(stack.length){
+      const [r,c]=stack[stack.length-1];
+      const nb=getUnvisited(grid,r,c);
+      if(!nb.length){
+        const popped=stack.pop();
+        if(stack.length)
+          steps.push({grid:deepCopy(grid),stack:stack.map(x=>[...x]),action:`Dead end at (${popped[0]},${popped[1]}). Backtracking… stack size: ${stack.length}`});
+        continue;
+      }
+      const idx=Math.floor(rand()*nb.length);
+      const [nr,nc,dir]=nb[idx];
+      removeWall(grid,r,c,nr,nc);
+      grid[nr][nc].visited=true;
+      stack.push([nr,nc]);
+      steps.push({grid:deepCopy(grid),stack:stack.map(x=>[...x]),action:`At (${r},${c}): carve ${dir} wall → move to (${nr},${nc}). Stack size: ${stack.length}`});
+    }
+    steps.push({grid:deepCopy(grid),stack:[],action:'DFS complete! Every cell has been visited. Maze is generated.'});
+    return steps;
+  }
+
+  function deepCopy(grid){
+    return grid.map(row=>row.map(c=>({...c})));
+  }
+
+  const steps=buildSteps();
+  let cur=0;
+  let autoTimer=null;
+
+  function stackSet(s){return new Set(s.map(([r,c])=>r+','+c));}
+
+  const isDark=()=>window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  function draw(stepIdx){
+    const {grid,stack}=steps[stepIdx];
+    const onStack=stackSet(stack);
+    const current=stack.length?stack[stack.length-1]:null;
+    const dark=isDark();
+
+    ctx.clearRect(0,0,W,H);
+    const bg=dark?'#1a1a18':'#f8f7f2';
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const x=PAD+c*CELL, y=PAD+r*CELL;
+        const cell=grid[r][c];
+        const key=r+','+c;
+        let fill;
+        if(current&&current[0]===r&&current[1]===c) fill=dark?'#BA7517':'#EF9F27';
+        else if(onStack.has(key)) fill=dark?'#3C3489':'#AFA9EC';
+        else if(cell.visited) fill=dark?'#085041':'#9FE1CB';
+        else fill=dark?'#444441':'#D3D1C7';
+
+        ctx.fillStyle=fill;
+        ctx.beginPath();
+        ctx.roundRect(x+2,y+2,CELL-4,CELL-4,4);
+        ctx.fill();
+
+        const wallColor=dark?'#1a1a18':'#f8f7f2';
+        ctx.strokeStyle=wallColor; ctx.lineWidth=3; ctx.lineCap='round';
+        if(cell.n){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+CELL,y);ctx.stroke();}
+        if(cell.s){ctx.beginPath();ctx.moveTo(x,y+CELL);ctx.lineTo(x+CELL,y+CELL);ctx.stroke();}
+        if(cell.w){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+CELL);ctx.stroke();}
+        if(cell.e){ctx.beginPath();ctx.moveTo(x+CELL,y);ctx.lineTo(x+CELL,y+CELL);ctx.stroke();}
+
+        ctx.fillStyle=dark?'rgba(255,255,255,0.3)':'rgba(0,0,0,0.25)';
+        ctx.font='11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(`${r},${c}`,x+CELL/2,y+CELL/2);
+      }
+    }
+
+    if(stack.length>1){
+      ctx.strokeStyle=dark?'#FAC775':'#BA7517'; ctx.lineWidth=2; ctx.setLineDash([4,3]);
+      ctx.beginPath();
+      for(let i=0;i<stack.length;i++){
+        const [sr,sc]=stack[i];
+        const px=PAD+sc*CELL+CELL/2, py=PAD+sr*CELL+CELL/2;
+        i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+      }
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  function updateUI(){
+    draw(cur);
+    document.getElementById('step-info').textContent=`Step ${cur+1}/${steps.length}: ${steps[cur].action}`;
+    document.getElementById('btn-prev').disabled=cur===0;
+    document.getElementById('btn-next').disabled=cur===steps.length-1;
+    document.getElementById('btn-auto').textContent=autoTimer?'Pause':'Auto play';
+  }
+
+  document.getElementById('btn-next').onclick=()=>{if(cur<steps.length-1){cur++;updateUI();}};
+  document.getElementById('btn-prev').onclick=()=>{if(cur>0){cur--;updateUI();}};
+  document.getElementById('btn-reset').onclick=()=>{cur=0;stopAuto();updateUI();};
+  document.getElementById('btn-auto').onclick=()=>{autoTimer?stopAuto():startAuto();};
+
+  function startAuto(){
+    if(cur===steps.length-1)cur=0;
+    autoTimer=setInterval(()=>{
+      if(cur<steps.length-1){cur++;updateUI();}
+      else stopAuto();
+    },350);
+    document.getElementById('btn-auto').textContent='Pause';
+  }
+  function stopAuto(){clearInterval(autoTimer);autoTimer=null;document.getElementById('btn-auto').textContent='Auto play';}
+
+  updateUI();
+})();
+</script>
